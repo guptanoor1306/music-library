@@ -63,15 +63,16 @@ st.title("🎧 Instagram Trending Audio (Global + India)")
 # GLOBAL SECTION
 st.header("🌍 Global Trends (via Buffer)")
 df_glob = fetch_buffer_songs()
+
 if df_glob.empty:
     st.error("⚠️ Unable to fetch global trends from Buffer.")
 else:
     for _, row in df_glob.iterrows():
-    st.subheader(row['Song'])
-    st.write(row["Why it's trending"])
-    if row['Preview Link']:
-        st.markdown(f"[🔗 Open on Instagram Audio Page]({row['Preview Link']})")
-    st.markdown("---")
+        st.subheader(row["Song"])
+        st.write(row["Why it's trending"])
+        if row["Preview Link"]:
+            st.markdown(f"[🔗 Open on Instagram Audio Page]({row['Preview Link']})")
+        st.markdown("---")
 
 # INDIA SECTION
 st.header("🇮🇳 Popular in India (via BossWallah)")
