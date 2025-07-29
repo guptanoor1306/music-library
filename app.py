@@ -29,18 +29,25 @@ def fetch_india_top10():
     url = "https://blog.bosswallah.com/trending-songs-on-instagram-reels-today/"
     res = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
     soup = BeautifulSoup(res.text, "html.parser")
-    h1 = soup.find("h1", string=lambda t: t and "Top 10 Trending Songs" in t)
-    if not h1:
+
+    # Get the first ordered list
+    ol = soup.find("ol")
+    if not ol:
         return pd.DataFrame()
+
     songs = []
-    for li in h1.find_next("ol").find_all("li", limit=10):
+    for li in ol.find_all("li", limit=10):
         raw = li.get_text(separator=" ", strip=True)
         parts = raw.split("–")
         song = parts[0].strip().strip('"')
-        rest = parts[1] if len(parts)>1 else ""
+        rest = parts[1] if len(parts) > 1 else ""
         artist = rest.split("•")[0].strip() if "•" in rest else ""
         reels = ''.join([c for c in rest if c.isdigit() or c in "+,"]) or ""
-        songs.append({"Song": song, "Artist": artist, "Reels Used": reels})
+        songs.append({
+            "Song": song,
+            "Artist": artist,
+            "Reels Used": reels
+        })
     return pd.DataFrame(songs)
 
 st.set_page_config(page_title="Instagram Trending Audio", layout="wide")
