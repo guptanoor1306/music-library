@@ -4,7 +4,6 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-# Caching the result to prevent re-downloading every time
 @st.cache_data
 def fetch_inbeat_trending_songs():
     url = "https://www.inbeat.co/trending-instagram-songs/"
@@ -14,6 +13,9 @@ def fetch_inbeat_trending_songs():
 
     songs = []
     rows = soup.select("table tbody tr")
+    if not rows:
+        return pd.DataFrame()  # return empty safely
+
     for row in rows:
         cells = row.find_all("td")
         if len(cells) >= 4:
@@ -46,24 +48,26 @@ def fetch_inbeat_trending_songs():
             })
     return pd.DataFrame(songs)
 
-# --- Streamlit UI ---
+# --- UI ---
 st.set_page_config(page_title="Trending IG Music by Mood", layout="wide")
 st.title("🎶 Trending Instagram Music Library (Categorized by Mood)")
 
 st.markdown("Top trending songs for Reels, categorized by vibe. Data sourced from [InBeat](https://www.inbeat.co/trending-instagram-songs/)")
 
-# Fetch data
 df = fetch_inbeat_trending_songs()
 
-# Mood categories
-categories = ['Upbeat', 'Energetic', 'Romantic', 'Emotional', 'Suspense', 'Uncategorized']
-for mood in categories:
-    st.subheader(f"🎧 {mood} Picks")
-    filtered = df[df['Mood'] == mood].head(10)
-    if not filtered.empty:
-        st.dataframe(filtered[['Rank', 'Song', 'Artist', 'Reels Used']], use_container_width=True)
-    else:
-        st.markdown("_No songs found in this category right now._")
+if df.empty:
+    st.error("⚠️ Couldn't fetch trending songs from InBeat. The site may have changed or is blocking access.")
+    st.info("Try re-running the app later or inspecting the source site layout.")
+else:
+    categories = ['Upbeat', 'Energetic', 'Romantic', 'Emotional', 'Suspense', 'Uncategorized']
+    for mood in categories:
+        st.subheader(f"🎧 {mood} Picks")
+        filtered = df[df['Mood'] == mood].head(10)
+        if not filtered.empty:
+            st.dataframe(filtered[['Rank', 'Song', 'Artist', 'Reels Used']], use_container_width=True)
+        else:
+            st.markdown("_No songs found in this category right now._")
 
-st.markdown("---")
-st.caption("🔁 Updated live • Data from InBeat.co • Built with ❤️ using Streamlit")
+    st.markdown("---")
+    st.caption("🔁 Updated live • Data from InBeat.co • Built with ❤️ using Streamlit")
