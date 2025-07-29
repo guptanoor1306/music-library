@@ -5,60 +5,62 @@ import requests
 from bs4 import BeautifulSoup
 
 @st.cache_data
-def fetch_buffer_trending_songs():
+def fetch_buffer_songs():
     url = "https://buffer.com/resources/trending-audio-instagram/?utm_source=chatgpt.com"
     res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
     soup = BeautifulSoup(res.text, "html.parser")
+    items = []
+    for h3 in soup.select("h3"):
+        title = h3.get_text(strip=True)
+        desc = h3.find_next("p").get_text(strip=True) if h3.find_next("p") else ""
+        # Try to find embed link if audio appears as link inside description
+        link = None
+        a = h3.find_next("a")
+        if a and "instagram.com" in a.get("href", ""):
+            link = a["href"]
+        items.append({"Song": title, "Description": desc, "Embed": link})
+    return pd.DataFrame(items)
 
-    blocks = soup.select("h3")
+@st.cache_data
+def fetch_india_songs():
+    url = "https://blog.bosswallah.com/trending-songs-on-instagram-reels-today/"
+    res = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
+    soup = BeautifulSoup(res.text, "html.parser")
     data = []
-    for h3 in blocks:
-        song_title = h3.get_text(strip=True)
-        para = h3.find_next("p")
-        description = para.get_text(strip=True) if para else ""
-        
-        # Basic mood tagging
-        desc = description.lower()
-        if any(word in desc for word in ["fun", "vibe", "dance", "party", "summer"]):
-            mood = "Upbeat"
-        elif any(word in desc for word in ["cry", "sad", "soft", "heart", "emotional"]):
-            mood = "Emotional"
-        elif any(word in desc for word in ["mystery", "dark", "slow build", "reveal"]):
-            mood = "Suspense"
-        elif any(word in desc for word in ["love", "romantic", "relationship"]):
-            mood = "Romantic"
-        elif any(word in desc for word in ["humor", "meme", "funny"]):
-            mood = "Comedy"
-        else:
-            mood = "Uncategorized"
-
-        data.append({
-            "Song": song_title,
-            "Mood": mood,
-            "Why it's trending": description
-        })
-
+    ol = soup.find("ol")
+    if not ol:
+        return pd.DataFrame()
+    for li in ol.find_all("li")[:10]:
+        text = li.get_text(strip=True)
+        parts = text.split("–")
+        song = parts[0].strip().strip('"')
+        artist = parts[1].split("–")[0].strip() if len(parts)>1 else ""
+        uses = "approx " + ''.join(filter(str.isdigit, text)) + "+"
+        data.append({"Song": song, "Artist": artist, "Reels Used": uses})
     return pd.DataFrame(data)
 
-# --- UI ---
-st.set_page_config(page_title="Trending IG Music by Mood", layout="wide")
-st.title("🎵 Trending Instagram Music (via Buffer)")
+# UI
+st.set_page_config(page_title="IG Trending Music & Previews", layout="wide")
+st.title("🎧 Instagram Trending Audio (Global + India)")
 
-st.markdown("Fetched from [Buffer's Trending Instagram Audio List](https://buffer.com/resources/trending-audio-instagram/)")
-
-df = fetch_buffer_trending_songs()
-
-if df.empty:
-    st.error("⚠️ Unable to fetch trending songs from Buffer. Try again later.")
+st.header("🌍 Global via Buffer")
+df_glob = fetch_buffer_songs()
+if df_glob.empty:
+    st.error("Failed to fetch global trends.")
 else:
-    categories = ['Upbeat', 'Romantic', 'Emotional', 'Suspense', 'Comedy', 'Uncategorized']
-    for mood in categories:
-        st.subheader(f"🎧 {mood} Picks")
-        filtered = df[df['Mood'] == mood].head(10)
-        if not filtered.empty:
-            st.dataframe(filtered, use_container_width=True)
-        else:
-            st.markdown("_No songs found in this category right now._")
+    for _, row in df_glob.head(10).iterrows():
+        st.subheader(row['Song'])
+        st.write(row['Description'])
+        if row['Embed']:
+            st.write(f"[Open on Instagram]({row['Embed']})")
+        st.markdown("---")
+
+st.header("🇮🇳 Popular in India")
+df_in = fetch_india_songs()
+if df_in.empty:
+    st.error("Failed to fetch India trends.")
+else:
+    st.dataframe(df_in)
 
 st.markdown("---")
-st.caption("🎯 Source: Buffer.com • Built with ❤️ using Streamlit")
+st.caption("Sources: Buffer.com for global, BossWallah.com for India 🇮🇳")
