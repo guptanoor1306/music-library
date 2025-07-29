@@ -5,69 +5,60 @@ import requests
 from bs4 import BeautifulSoup
 
 @st.cache_data
-def fetch_inbeat_trending_songs():
-    url = "https://www.inbeat.co/trending-instagram-songs/"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    res = requests.get(url, headers=headers)
-    soup = BeautifulSoup(res.text, 'html.parser')
+def fetch_buffer_trending_songs():
+    url = "https://buffer.com/resources/trending-audio-instagram/?utm_source=chatgpt.com"
+    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+    soup = BeautifulSoup(res.text, "html.parser")
 
-    songs = []
-    rows = soup.select("table tbody tr")
-    if not rows:
-        return pd.DataFrame()  # return empty safely
+    blocks = soup.select("h3")
+    data = []
+    for h3 in blocks:
+        song_title = h3.get_text(strip=True)
+        para = h3.find_next("p")
+        description = para.get_text(strip=True) if para else ""
+        
+        # Basic mood tagging
+        desc = description.lower()
+        if any(word in desc for word in ["fun", "vibe", "dance", "party", "summer"]):
+            mood = "Upbeat"
+        elif any(word in desc for word in ["cry", "sad", "soft", "heart", "emotional"]):
+            mood = "Emotional"
+        elif any(word in desc for word in ["mystery", "dark", "slow build", "reveal"]):
+            mood = "Suspense"
+        elif any(word in desc for word in ["love", "romantic", "relationship"]):
+            mood = "Romantic"
+        elif any(word in desc for word in ["humor", "meme", "funny"]):
+            mood = "Comedy"
+        else:
+            mood = "Uncategorized"
 
-    for row in rows:
-        cells = row.find_all("td")
-        if len(cells) >= 4:
-            rank = cells[0].text.strip()
-            name = cells[1].text.strip()
-            artist = cells[2].text.strip()
-            reels_used = cells[3].text.strip()
+        data.append({
+            "Song": song_title,
+            "Mood": mood,
+            "Why it's trending": description
+        })
 
-            # Basic rule-based categorization
-            name_lower = name.lower()
-            if any(word in name_lower for word in ["love", "heart", "romantic"]):
-                mood = "Romantic"
-            elif any(word in name_lower for word in ["trap", "beat", "energy", "fire", "hype"]):
-                mood = "Energetic"
-            elif any(word in name_lower for word in ["sad", "alone", "cry", "slow"]):
-                mood = "Emotional"
-            elif any(word in name_lower for word in ["fun", "happy", "party", "vibe"]):
-                mood = "Upbeat"
-            elif any(word in name_lower for word in ["suspense", "mystery", "dark"]):
-                mood = "Suspense"
-            else:
-                mood = "Uncategorized"
-
-            songs.append({
-                "Rank": rank,
-                "Song": name,
-                "Artist": artist,
-                "Reels Used": reels_used,
-                "Mood": mood
-            })
-    return pd.DataFrame(songs)
+    return pd.DataFrame(data)
 
 # --- UI ---
 st.set_page_config(page_title="Trending IG Music by Mood", layout="wide")
-st.title("🎶 Trending Instagram Music Library (Categorized by Mood)")
+st.title("🎵 Trending Instagram Music (via Buffer)")
 
-st.markdown("Top trending songs for Reels, categorized by vibe. Data sourced from [InBeat](https://www.inbeat.co/trending-instagram-songs/)")
+st.markdown("Fetched from [Buffer's Trending Instagram Audio List](https://buffer.com/resources/trending-audio-instagram/)")
 
-df = fetch_inbeat_trending_songs()
+df = fetch_buffer_trending_songs()
 
 if df.empty:
-    st.error("⚠️ Couldn't fetch trending songs from InBeat. The site may have changed or is blocking access.")
-    st.info("Try re-running the app later or inspecting the source site layout.")
+    st.error("⚠️ Unable to fetch trending songs from Buffer. Try again later.")
 else:
-    categories = ['Upbeat', 'Energetic', 'Romantic', 'Emotional', 'Suspense', 'Uncategorized']
+    categories = ['Upbeat', 'Romantic', 'Emotional', 'Suspense', 'Comedy', 'Uncategorized']
     for mood in categories:
         st.subheader(f"🎧 {mood} Picks")
         filtered = df[df['Mood'] == mood].head(10)
         if not filtered.empty:
-            st.dataframe(filtered[['Rank', 'Song', 'Artist', 'Reels Used']], use_container_width=True)
+            st.dataframe(filtered, use_container_width=True)
         else:
             st.markdown("_No songs found in this category right now._")
 
-    st.markdown("---")
-    st.caption("🔁 Updated live • Data from InBeat.co • Built with ❤️ using Streamlit")
+st.markdown("---")
+st.caption("🎯 Source: Buffer.com • Built with ❤️ using Streamlit")
