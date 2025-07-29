@@ -1,87 +1,64 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-# --- GLOBAL TRENDS (from Buffer.com) ---
 @st.cache_data
-def fetch_buffer_songs():
+def fetch_buffer_top17():
     url = "https://buffer.com/resources/trending-audio-instagram/"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    res = requests.get(url, headers=headers)
+    res = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
     soup = BeautifulSoup(res.text, "html.parser")
 
-    songs = []
-    article = soup.find("article")
-    if not article:
+    header = soup.find("h2", string=lambda t: t and "17 Trending Sounds" in t)
+    if not header:
         return pd.DataFrame()
-
-    headers = article.find_all("h3")
-    for h in headers:
-        song_title = h.get_text(strip=True)
-        # Skip irrelevant section headings
-        if any(x in song_title.lower() for x in ["create", "publish", "engage", "analyze", "start page"]):
-            continue
-        para = h.find_next_sibling("p")
-        description = para.get_text(strip=True) if para else ""
-        link = None
-        a = h.find_next("a")
-        if a and "instagram.com" in a.get("href", ""):
-            link = a["href"]
-        songs.append({
-            "Song": song_title,
-            "Why it's trending": description,
-            "Preview Link": link
-        })
+    songs = []
+    ul = header.find_next_sibling("ul")
+    if not ul:
+        return pd.DataFrame()
+    for li in ul.find_all("li", limit=17):
+        text = li.get_text(separator=" ", strip=True)
+        title = text.split("–")[0].split(". ",1)[-1]
+        desc = li.find("p")
+        desc_text = desc.get_text(strip=True) if desc else ""
+        songs.append({"Song": title, "Details": desc_text})
     return pd.DataFrame(songs)
 
-# --- INDIA-SPECIFIC TRENDS (from BossWallah) ---
 @st.cache_data
-def fetch_india_songs():
+def fetch_india_top10():
     url = "https://blog.bosswallah.com/trending-songs-on-instagram-reels-today/"
-    headers = {"User-Agent":"Mozilla/5.0"}
-    res = requests.get(url, headers=headers)
+    res = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
     soup = BeautifulSoup(res.text, "html.parser")
-    data = []
-    ol = soup.find("ol")
-    if not ol:
+    h1 = soup.find("h1", string=lambda t: t and "Top 10 Trending Songs" in t)
+    if not h1:
         return pd.DataFrame()
-    for li in ol.find_all("li")[:10]:
-        text = li.get_text(strip=True)
-        parts = text.split("–")
+    songs = []
+    for li in h1.find_next("ol").find_all("li", limit=10):
+        raw = li.get_text(separator=" ", strip=True)
+        parts = raw.split("–")
         song = parts[0].strip().strip('"')
-        artist = parts[1].split("–")[0].strip() if len(parts)>1 else ""
-        uses = "approx " + ''.join(filter(str.isdigit, text)) + "+" if any(c.isdigit() for c in text) else ""
-        data.append({"Song": song, "Artist": artist, "Reels Used": uses})
-    return pd.DataFrame(data)
+        rest = parts[1] if len(parts)>1 else ""
+        artist = rest.split("•")[0].strip() if "•" in rest else ""
+        reels = ''.join([c for c in rest if c.isdigit() or c in "+,"]) or ""
+        songs.append({"Song": song, "Artist": artist, "Reels Used": reels})
+    return pd.DataFrame(songs)
 
-# --- STREAMLIT UI ---
-st.set_page_config(page_title="Instagram Trending Music", layout="wide")
+st.set_page_config(page_title="Instagram Trending Audio", layout="wide")
 st.title("🎧 Instagram Trending Audio (Global + India)")
 
-# GLOBAL SECTION
-st.header("🌍 Global Trends (via Buffer)")
-df_glob = fetch_buffer_songs()
-
+df_glob = fetch_buffer_top17()
 if df_glob.empty:
-    st.error("⚠️ Unable to fetch global trends from Buffer.")
+    st.error("⚠️ Couldn't fetch Buffer's trending list.")
 else:
-    for _, row in df_glob.iterrows():
-        st.subheader(row["Song"])
-        st.write(row["Why it's trending"])
-        if row["Preview Link"]:
-            st.markdown(f"[🔗 Open on Instagram Audio Page]({row['Preview Link']})")
-        st.markdown("---")
+    st.header("🌍 Global (Top 17 via Buffer)")
+    st.dataframe(df_glob, use_container_width=True)
 
-# INDIA SECTION
-st.header("🇮🇳 Popular in India (via BossWallah)")
-df_in = fetch_india_songs()
-if df_in.empty:
-    st.error("⚠️ Unable to fetch India-specific trends.")
+df_ind = fetch_india_top10()
+if df_ind.empty:
+    st.error("⚠️ Couldn't fetch India trending list.")
 else:
-    st.dataframe(df_in, use_container_width=True)
+    st.header("🇮🇳 India (Top 10 via BossWallah)")
+    st.dataframe(df_ind, use_container_width=True)
 
-# FOOTER
 st.markdown("---")
-st.caption("🎯 Sources: Buffer.com (global), BossWallah.com (India) • Built with ❤️ using Streamlit")
+st.caption("Sources: Buffer.com :contentReference[oaicite:11]{index=11}, BossWallah.com :contentReference[oaicite:12]{index=12} • Built with ❤️ using Streamlit")
