@@ -4,27 +4,44 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
+# --- GLOBAL TRENDS (from Buffer.com) ---
 @st.cache_data
 def fetch_buffer_songs():
-    url = "https://buffer.com/resources/trending-audio-instagram/?utm_source=chatgpt.com"
-    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+    url = "https://buffer.com/resources/trending-audio-instagram/"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    res = requests.get(url, headers=headers)
     soup = BeautifulSoup(res.text, "html.parser")
-    items = []
-    for h3 in soup.select("h3"):
-        title = h3.get_text(strip=True)
-        desc = h3.find_next("p").get_text(strip=True) if h3.find_next("p") else ""
-        # Try to find embed link if audio appears as link inside description
+
+    songs = []
+    article = soup.find("article")
+    if not article:
+        return pd.DataFrame()
+
+    headers = article.find_all("h3")
+    for h in headers:
+        song_title = h.get_text(strip=True)
+        # Skip irrelevant section headings
+        if any(x in song_title.lower() for x in ["create", "publish", "engage", "analyze", "start page"]):
+            continue
+        para = h.find_next_sibling("p")
+        description = para.get_text(strip=True) if para else ""
         link = None
-        a = h3.find_next("a")
+        a = h.find_next("a")
         if a and "instagram.com" in a.get("href", ""):
             link = a["href"]
-        items.append({"Song": title, "Description": desc, "Embed": link})
-    return pd.DataFrame(items)
+        songs.append({
+            "Song": song_title,
+            "Why it's trending": description,
+            "Preview Link": link
+        })
+    return pd.DataFrame(songs)
 
+# --- INDIA-SPECIFIC TRENDS (from BossWallah) ---
 @st.cache_data
 def fetch_india_songs():
     url = "https://blog.bosswallah.com/trending-songs-on-instagram-reels-today/"
-    res = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
+    headers = {"User-Agent":"Mozilla/5.0"}
+    res = requests.get(url, headers=headers)
     soup = BeautifulSoup(res.text, "html.parser")
     data = []
     ol = soup.find("ol")
@@ -35,32 +52,35 @@ def fetch_india_songs():
         parts = text.split("–")
         song = parts[0].strip().strip('"')
         artist = parts[1].split("–")[0].strip() if len(parts)>1 else ""
-        uses = "approx " + ''.join(filter(str.isdigit, text)) + "+"
+        uses = "approx " + ''.join(filter(str.isdigit, text)) + "+" if any(c.isdigit() for c in text) else ""
         data.append({"Song": song, "Artist": artist, "Reels Used": uses})
     return pd.DataFrame(data)
 
-# UI
-st.set_page_config(page_title="IG Trending Music & Previews", layout="wide")
+# --- STREAMLIT UI ---
+st.set_page_config(page_title="Instagram Trending Music", layout="wide")
 st.title("🎧 Instagram Trending Audio (Global + India)")
 
-st.header("🌍 Global via Buffer")
+# GLOBAL SECTION
+st.header("🌍 Global Trends (via Buffer)")
 df_glob = fetch_buffer_songs()
 if df_glob.empty:
-    st.error("Failed to fetch global trends.")
+    st.error("⚠️ Unable to fetch global trends from Buffer.")
 else:
-    for _, row in df_glob.head(10).iterrows():
+    for _, row in df_glob.iterrows():
         st.subheader(row['Song'])
-        st.write(row['Description'])
-        if row['Embed']:
-            st.write(f"[Open on Instagram]({row['Embed']})")
+        st.write(row['Why it's trending'])
+        if row['Preview Link']:
+            st.markdown(f"[🔗 Open on Instagram Audio Page]({row['Preview Link']})")
         st.markdown("---")
 
-st.header("🇮🇳 Popular in India")
+# INDIA SECTION
+st.header("🇮🇳 Popular in India (via BossWallah)")
 df_in = fetch_india_songs()
 if df_in.empty:
-    st.error("Failed to fetch India trends.")
+    st.error("⚠️ Unable to fetch India-specific trends.")
 else:
-    st.dataframe(df_in)
+    st.dataframe(df_in, use_container_width=True)
 
+# FOOTER
 st.markdown("---")
-st.caption("Sources: Buffer.com for global, BossWallah.com for India 🇮🇳")
+st.caption("🎯 Sources: Buffer.com (global), BossWallah.com (India) • Built with ❤️ using Streamlit")
